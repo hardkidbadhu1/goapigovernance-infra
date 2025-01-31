@@ -222,16 +222,6 @@ resource "aws_cognito_user_pool_client" "goapigovernance_user_client" {
   callback_urls = ["https://admin.goapigovernance.com/callback"]
 }
 
-resource "aws_cognito_user_pool_client" "goapigovernance_user_client" {
-  name         = "goapigovernance-client"
-  user_pool_id = aws_cognito_user_pool.goapigovernance_user_pool.id
-  generate_secret = true
-
-  allowed_oauth_flows = ["code", "implicit"]
-  allowed_oauth_scopes = ["openid", "email", "profile"]
-  supported_identity_providers = ["COGNITO"]
-}
-
 
 resource "aws_cloudwatch_log_group" "goapigovernance_logs" {
   name = "goapigovernance-logs"
