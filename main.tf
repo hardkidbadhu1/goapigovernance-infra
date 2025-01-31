@@ -15,7 +15,7 @@ module "kong" {
 
 module "eks" {
   source = "./modules/eks"
-  vpc_id = module.kong.vpc_id
+  vpc_id = module.vpc.vpc_id
 }
 
 module "cognito" {
