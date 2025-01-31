@@ -181,7 +181,7 @@ resource "aws_wafregional_web_acl" "goapigovernance_waf" {
     type = "ALLOW"
   }
 
-  rule {
+  # rule {
     action {
       type = "BLOCK"
     }
