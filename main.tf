@@ -181,7 +181,7 @@ resource "aws_wafregional_web_acl" "goapigovernance_waf" {
     type = "ALLOW"
   }
 
-  rules {
+  rule {
     action {
       type = "BLOCK"
     }
@@ -255,7 +255,7 @@ resource "aws_quicksight_data_source" "goapigovernance_quicksight" {
   type           = "S3"
 
   parameters {
-    s3_parameters {
+    s3 {
       manifest_file_location {
         bucket  = aws_s3_bucket.goapigovernance_logs.bucket
         key     = "manifest.json"
