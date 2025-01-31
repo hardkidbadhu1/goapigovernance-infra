@@ -23,7 +23,3 @@ resource "aws_iam_role" "eks_cluster_role" {
     ]
   })
 }
-
-output "cluster_name" {
-  value = aws_eks_cluster.eks_cluster.name
-}
