@@ -36,6 +36,29 @@ resource "aws_subnet" "private_subnet_1" {
   }
 }
 
+resource "aws_subnet" "public_subnet_2" {
+  vpc_id                  = aws_vpc.goapigovernance_vpc.id
+  cidr_block              = "10.0.3.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "ap-northeast-1b"
+
+  tags = {
+    Name = "goapigovernance-public-2"
+    Project = "goapigovernance"
+  }
+}
+
+resource "aws_subnet" "private_subnet_2" {
+  vpc_id            = aws_vpc.goapigovernance_vpc.id
+  cidr_block        = "10.0.4.0/24"
+  availability_zone = "ap-northeast-1b"
+
+  tags = {
+    Name = "goapigovernance-private-2"
+    Project = "goapigovernance"
+  }
+}
+
 resource "aws_internet_gateway" "goapigovernance_igw" {
   vpc_id = aws_vpc.goapigovernance_vpc.id
 
@@ -82,7 +105,7 @@ resource "aws_eks_cluster" "goapigovernance_eks" {
   name     = "goapigovernance-eks"
   role_arn = aws_iam_role.eks_cluster_role.arn
   vpc_config {
-    subnet_ids = [aws_subnet.public_subnet_1.id, aws_subnet.private_subnet_1.id]
+    subnet_ids = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id, aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id]
   }
 
   tags = {
@@ -187,8 +210,16 @@ resource "aws_wafregional_web_acl" "goapigovernance_waf" {
   }
 }
 
-resource "aws_cognito_user_pool" "goapigovernance_user_pool" {
-  name = "goapigovernance-user-pool"
+resource "aws_cognito_user_pool_client" "goapigovernance_user_client" {
+  name         = "goapigovernance-client"
+  user_pool_id = aws_cognito_user_pool.goapigovernance_user_pool.id
+  generate_secret = true
+
+  allowed_oauth_flows = ["code", "implicit"]
+  allowed_oauth_scopes = ["openid", "email", "profile"]
+  supported_identity_providers = ["COGNITO"]
+
+  callback_urls = ["https://admin.goapigovernance.com/callback"]
 }
 
 resource "aws_cognito_user_pool_client" "goapigovernance_user_client" {
@@ -224,6 +255,12 @@ resource "aws_kinesis_stream" "goapigovernance_kinesis" {
 resource "aws_opensearch_domain" "goapigovernance_opensearch" {
   domain_name    = "goapigovernance-search"
   engine_version = "OpenSearch_2.3"
+
+  ebs_options {
+    ebs_enabled = true
+    volume_size = 20
+    volume_type = "gp2"
+  }
 
   tags = {
     Name = "goapigovernance-opensearch"
@@ -264,6 +301,8 @@ resource "aws_redshift_cluster" "goapigovernance_redshift" {
   cluster_identifier = "goapigovernance-redshift"
   node_type          = "dc2.large"
   number_of_nodes    = 2
+  master_username    = "admin"
+  master_password    = "SuperSecurePassword123"
 
   tags = {
     Name = "goapigovernance-redshift"
