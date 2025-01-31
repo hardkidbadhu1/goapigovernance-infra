@@ -90,3 +90,11 @@ resource "aws_acm_certificate" "kong_admin_cert" {
 output "kong_admin_endpoint" {
   value = "https://admin.goapigovernance.com"
 }
+
+output "kong_endpoint" {
+  value = aws_instance.kong_gateway.public_dns
+}
+
+output "vpc_id" {
+  value = var.vpc_id
+}
