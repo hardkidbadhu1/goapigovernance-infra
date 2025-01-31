@@ -28,9 +28,7 @@ module "waf_shield" {
 }
 
 module "alb" {
-  source = "./modules/alb"
-  vpc_id = module.kong.vpc_id
-  eks_cluster_name = module.eks.cluster_name
+  source           = "./modules/alb"
 }
 
 module "cloudwatch" {
