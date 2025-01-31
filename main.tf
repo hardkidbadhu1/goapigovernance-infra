@@ -210,6 +210,28 @@ resource "aws_wafregional_web_acl" "goapigovernance_waf" {
   }
 }
 
+resource "aws_cognito_user_pool" "goapigovernance_user_pool" {
+  name = "goapigovernance-user-pool"
+
+  auto_verified_attributes = ["email"]
+  username_attributes      = ["email"]
+
+  schema {
+    attribute_data_type = "String"
+    name               = "email"
+    required           = true
+  }
+
+  admin_create_user_config {
+    allow_admin_create_user_only = true
+  }
+
+  tags = {
+    Name    = "goapigovernance-user-pool"
+    Project = "goapigovernance"
+  }
+}
+
 resource "aws_cognito_user_pool_client" "goapigovernance_user_client" {
   name         = "goapigovernance-client"
   user_pool_id = aws_cognito_user_pool.goapigovernance_user_pool.id
