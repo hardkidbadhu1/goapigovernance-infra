@@ -118,7 +118,13 @@ resource "aws_eks_node_group" "goapigovernance_nodes" {
   subnet_ids      = [aws_subnet.private_subnet_1.id]
   instance_types  = ["t3.medium"]
 
-tagging = {
+  scaling_config {
+    desired_size = 2
+    max_size     = 3
+    min_size     = 1
+  }
+
+  tags = {
     Name = "goapigovernance-node-group"
     Project = "goapigovernance"
   }
@@ -167,28 +173,20 @@ resource "helm_release" "kong" {
 }
 
 
-resource "aws_waf_web_acl" "goapigovernance_waf" {
+resource "aws_wafregional_web_acl" "goapigovernance_waf" {
   name        = "goapigovernance-waf"
-  scope       = "REGIONAL"
+  metric_name = "goapigovernanceWAF"
 
   default_action {
-    allow {}
+    type = "ALLOW"
   }
 
-  rule {
-    name     = "block-bad-requests"
-    priority = 1
-
+  rules {
     action {
-      block {}
+      type = "BLOCK"
     }
-
-    statement {
-      rate_based_statement {
-        limit = 2000
-        aggregate_key_type = "IP"
-      }
-    }
+    priority = 1
+    rule_id  = aws_wafregional_rule.goapigovernance_rule.id
   }
 
   tags = {
@@ -255,6 +253,15 @@ resource "aws_quicksight_data_source" "goapigovernance_quicksight" {
   data_source_id = "goapigovernance-quicksight"
   name           = "goapigovernance-data-source"
   type           = "S3"
+
+  parameters {
+    s3_parameters {
+      manifest_file_location {
+        bucket  = aws_s3_bucket.goapigovernance_logs.bucket
+        key     = "manifest.json"
+      }
+    }
+  }
 
   tags = {
     Name = "goapigovernance-quicksight"
