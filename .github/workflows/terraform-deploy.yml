@@ -1,0 +1,69 @@
+name: "Terraform CI/CD on EC2"
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual trigger for destruction
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Debug GitHub Ref
+        run: |
+          echo "Current branch: ${{ github.ref }}"
+
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Debug GitHub Secrets
+        run: |
+          echo "EC2_HOST: ${{ secrets.EC2_HOST }}"
+          echo "EC2_USER: ${{ secrets.EC2_USER }}"
+      - name: Setup SSH Access
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy Terraform on EC2
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /path/to/your/terraform/project
+            git pull origin main
+            terraform init
+            terraform validate
+            terraform apply -auto-approve
+          EOF
+
+  destroy:
+    if: github.ref == 'refs/heads/destroy'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Debug GitHub Ref
+        run: |
+          echo "Current branch: ${{ github.ref }}"
+
+      - name: Setup SSH Access
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Destroy Terraform on EC2
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /path/to/your/terraform/project
+            git pull origin destroy
+            terraform init
+            terraform destroy -auto-approve
+          EOF
