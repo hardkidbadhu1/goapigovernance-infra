@@ -186,7 +186,7 @@ resource "aws_wafregional_web_acl" "goapigovernance_waf" {
       type = "BLOCK"
     }
     priority = 1
-    rule_id  = aws_wafregional_rule.goapigovernance_rule.id
+    # rule_id  = aws_wafregional_rule.goapigovernance_rule.id
   }
 
   tags = {
@@ -212,11 +212,6 @@ resource "aws_cognito_user_pool_client" "goapigovernance_user_client" {
   allowed_oauth_flows = ["code", "implicit"]
   allowed_oauth_scopes = ["openid", "email", "profile"]
   supported_identity_providers = ["COGNITO"]
-
-  tags = {
-    Name = "goapigovernance-user-client"
-    Project = "goapigovernance"
-  }
 }
 
 
