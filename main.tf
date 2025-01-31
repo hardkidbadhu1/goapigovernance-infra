@@ -8,15 +8,25 @@ module "route53" {
   quicksight_dashboard_url = module.quicksight.dashboard_url
 }
 
-module "kong" {
-  source = "./modules/kong"
-  vpc_id = module.vpc.vpc_id
-  public_subnet_ids = module.vpc.public_subnet_ids
+module "vpc" {
+  source = "./modules/vpc"
 }
 
 module "eks" {
   source = "./modules/eks"
   vpc_id = module.vpc.vpc_id
+}
+
+module "alb" {
+  source           = "./modules/alb"
+  vpc_id           = module.vpc.vpc_id
+  eks_cluster_name = module.eks.cluster_name
+}
+
+module "kong" {
+  source = "./modules/kong"
+  vpc_id = module.vpc.vpc_id
+  public_subnet_ids = module.vpc.public_subnet_ids
 }
 
 module "cognito" {
@@ -26,10 +36,6 @@ module "cognito" {
 
 module "waf_shield" {
   source = "./modules/waf-shield"
-}
-
-module "alb" {
-  source           = "./modules/alb"
 }
 
 module "cloudwatch" {
