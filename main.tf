@@ -181,14 +181,6 @@ resource "aws_wafregional_web_acl" "goapigovernance_waf" {
     type = "ALLOW"
   }
 
-  # rule {
-    action {
-      type = "BLOCK"
-    }
-    priority = 1
-    # rule_id  = aws_wafregional_rule.goapigovernance_rule.id
-  }
-
   tags = {
     Name = "goapigovernance-waf"
     Project = "goapigovernance"
@@ -197,11 +189,6 @@ resource "aws_wafregional_web_acl" "goapigovernance_waf" {
 
 resource "aws_cognito_user_pool" "goapigovernance_user_pool" {
   name = "goapigovernance-user-pool"
-
-  tags = {
-    Name = "goapigovernance-user-pool"
-    Project = "goapigovernance"
-  }
 }
 
 resource "aws_cognito_user_pool_client" "goapigovernance_user_client" {
