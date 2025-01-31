@@ -1,9 +1,9 @@
 resource "aws_cognito_user_pool" "user_pool" {
-  name = "goapigovernance-user-pool"
+  name = "${var.domain}-user-pool"
 }
 
 resource "aws_cognito_user_pool_client" "client" {
-  name         = "goapigovernance-client"
+  name         = "${var.domain}-client"
   user_pool_id = aws_cognito_user_pool.user_pool.id
 }
 
