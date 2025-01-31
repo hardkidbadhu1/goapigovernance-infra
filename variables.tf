@@ -19,3 +19,8 @@ variable "eks_cluster_name" {
   description = "The name of the EKS cluster to which the ALB will route traffic"
   type        = string
 }
+
+variable "quicksight_dashboard_url" {
+  description = "The URL of the QuickSight dashboard"
+  type        = string
+}

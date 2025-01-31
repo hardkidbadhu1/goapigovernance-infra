@@ -1,19 +1,15 @@
 resource "aws_route53_zone" "primary" {
-  name = "goapigovernance.com"
-}
-
-resource "aws_route53_record" "kong_admin_cname" {
-  zone_id = aws_route53_zone.primary.zone_id
-  name    = "admin.goapigovernance.com"
-  type    = "CNAME"
-  ttl     = 300
-  records = [module.kong.kong_admin_endpoint]
+  name = var.domain
 }
 
 resource "aws_route53_record" "quicksight_cname" {
   zone_id = aws_route53_zone.primary.zone_id
-  name    = "dashboard.goapigovernance.com"
+  name    = "dashboard.${var.domain}"
   type    = "CNAME"
   ttl     = 300
-  records = [module.quicksight.dashboard_url]
+  records = [var.quicksight_dashboard_url]
+}
+
+output "zone_id" {
+  value = aws_route53_zone.primary.zone_id
 }

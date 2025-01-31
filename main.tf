@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 module "route53" {
-  source = "./modules/route53"
+  source                  = "./modules/route53"
   domain                  = "goapigovernance.com"
   quicksight_dashboard_url = module.quicksight.dashboard_url
 }
