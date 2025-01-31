@@ -40,7 +40,7 @@ resource "aws_subnet" "public_subnet_2" {
   vpc_id                  = aws_vpc.goapigovernance_vpc.id
   cidr_block              = "10.0.3.0/24"
   map_public_ip_on_launch = true
-  availability_zone       = "ap-northeast-1b"
+  availability_zone       = "ap-northeast-1c"
 
   tags = {
     Name = "goapigovernance-public-2"
@@ -51,10 +51,33 @@ resource "aws_subnet" "public_subnet_2" {
 resource "aws_subnet" "private_subnet_2" {
   vpc_id            = aws_vpc.goapigovernance_vpc.id
   cidr_block        = "10.0.4.0/24"
-  availability_zone = "ap-northeast-1b"
+  availability_zone = "ap-northeast-1c"
 
   tags = {
     Name = "goapigovernance-private-2"
+    Project = "goapigovernance"
+  }
+}
+
+resource "aws_subnet" "public_subnet_3" {
+  vpc_id                  = aws_vpc.goapigovernance_vpc.id
+  cidr_block              = "10.0.5.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "ap-northeast-1d"
+
+  tags = {
+    Name    = "goapigovernance-public-3"
+    Project = "goapigovernance"
+  }
+}
+
+resource "aws_subnet" "private_subnet_3" {
+  vpc_id            = aws_vpc.goapigovernance_vpc.id
+  cidr_block        = "10.0.6.0/24"
+  availability_zone = "ap-northeast-1d"
+
+  tags = {
+    Name    = "goapigovernance-private-3"
     Project = "goapigovernance"
   }
 }
