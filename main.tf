@@ -336,6 +336,26 @@ resource "aws_opensearch_domain" "goapigovernance_opensearch" {
   }
 }
 
+resource "aws_iam_role" "terraform_ec2_role" {
+  name = "terraform-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = "sts:AssumeRole"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
+
+  tags = {
+    Name    = "terraform-ec2-role"
+    Project = "goapigovernance"
+  }
+}
+
 resource "aws_iam_policy" "quicksight_s3_access" {
   name        = "quicksight-s3-access"
   description = "Allows QuickSight to access S3 logs"
