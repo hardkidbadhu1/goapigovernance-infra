@@ -1,423 +1,359 @@
-provider "aws" {
-  region = "ap-northeast-1"
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 4.0"
+    }
+  }
+  required_version = ">= 1.0"
 }
 
-resource "aws_vpc" "goapigovernance_vpc" {
-  cidr_block = "10.0.0.0/16"
-  enable_dns_support = true
-  enable_dns_hostnames = true
+provider "aws" {
+  region = "us-east-1"
+}
 
+#########################################
+# VPC, Subnets, and Internet Gateway
+#########################################
+
+resource "aws_vpc" "cipher_vpc" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
   tags = {
-    Name = "goapigovernance-vpc"
-    Project = "goapigovernance"
+    Name = "cipher-vpc"
   }
 }
 
 resource "aws_subnet" "public_subnet_1" {
-  vpc_id                  = aws_vpc.goapigovernance_vpc.id
+  vpc_id                  = aws_vpc.cipher_vpc.id
   cidr_block              = "10.0.1.0/24"
+  availability_zone       = "us-east-1a"
   map_public_ip_on_launch = true
-  availability_zone       = "ap-northeast-1a"
-
   tags = {
-    Name = "goapigovernance-public-1"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_subnet" "private_subnet_1" {
-  vpc_id            = aws_vpc.goapigovernance_vpc.id
-  cidr_block        = "10.0.2.0/24"
-  availability_zone = "ap-northeast-1a"
-
-  tags = {
-    Name = "goapigovernance-private-1"
-    Project = "goapigovernance"
+    Name = "cipher-public-subnet-1"
   }
 }
 
 resource "aws_subnet" "public_subnet_2" {
-  vpc_id                  = aws_vpc.goapigovernance_vpc.id
-  cidr_block              = "10.0.3.0/24"
+  vpc_id                  = aws_vpc.cipher_vpc.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "us-east-1b"
   map_public_ip_on_launch = true
-  availability_zone       = "ap-northeast-1c"
-
   tags = {
-    Name = "goapigovernance-public-2"
-    Project = "goapigovernance"
+    Name = "cipher-public-subnet-2"
   }
 }
 
-resource "aws_subnet" "private_subnet_2" {
-  vpc_id            = aws_vpc.goapigovernance_vpc.id
-  cidr_block        = "10.0.4.0/24"
-  availability_zone = "ap-northeast-1c"
-
+resource "aws_internet_gateway" "cipher_igw" {
+  vpc_id = aws_vpc.cipher_vpc.id
   tags = {
-    Name = "goapigovernance-private-2"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_subnet" "public_subnet_3" {
-  vpc_id                  = aws_vpc.goapigovernance_vpc.id
-  cidr_block              = "10.0.5.0/24"
-  map_public_ip_on_launch = true
-  availability_zone       = "ap-northeast-1d"
-
-  tags = {
-    Name    = "goapigovernance-public-3"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_subnet" "private_subnet_3" {
-  vpc_id            = aws_vpc.goapigovernance_vpc.id
-  cidr_block        = "10.0.6.0/24"
-  availability_zone = "ap-northeast-1d"
-
-  tags = {
-    Name    = "goapigovernance-private-3"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_internet_gateway" "goapigovernance_igw" {
-  vpc_id = aws_vpc.goapigovernance_vpc.id
-
-  tags = {
-    Name = "goapigovernance-igw"
-    Project = "goapigovernance"
+    Name = "cipher-igw"
   }
 }
 
 resource "aws_route_table" "public_rt" {
-  vpc_id = aws_vpc.goapigovernance_vpc.id
-
+  vpc_id = aws_vpc.cipher_vpc.id
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.goapigovernance_igw.id
+    gateway_id = aws_internet_gateway.cipher_igw.id
   }
-
   tags = {
-    Name = "goapigovernance-public-rt"
-    Project = "goapigovernance"
+    Name = "cipher-public-rt"
   }
 }
 
-resource "aws_route_table_association" "public_assoc" {
+resource "aws_route_table_association" "public_rt_assoc_1" {
   subnet_id      = aws_subnet.public_subnet_1.id
   route_table_id = aws_route_table.public_rt.id
 }
 
-resource "aws_nat_gateway" "goapigovernance_nat" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public_subnet_1.id
-
-  tags = {
-    Name = "goapigovernance-nat"
-    Project = "goapigovernance"
-  }
+resource "aws_route_table_association" "public_rt_assoc_2" {
+  subnet_id      = aws_subnet.public_subnet_2.id
+  route_table_id = aws_route_table.public_rt.id
 }
 
-resource "aws_eip" "nat" {
-  domain = "vpc"
+#########################################
+# ECS Cluster & Task Execution Role
+#########################################
+
+resource "aws_ecs_cluster" "cipher_cluster" {
+  name = "cipher-cluster"
 }
 
-resource "aws_iam_role" "eks_cluster_role" {
-  name = "goapigovernance-eks-role"
-
+resource "aws_iam_role" "ecs_task_execution_role" {
+  name = "ecsTaskExecutionRole"
   assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = "sts:AssumeRole"
-      Principal = {
-        Service = "eks.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = {
-    Name    = "goapigovernance-eks-role"
-    Project = "goapigovernance"
-  }
-}
-
-# Attach Required Policies to EKS Cluster Role
-resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-  role       = aws_iam_role.eks_cluster_role.name
-}
-
-resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
-  role       = aws_iam_role.eks_cluster_role.name
-}
-
-resource "aws_eks_cluster" "goapigovernance_eks" {
-  name     = "goapigovernance-eks"
-  role_arn = aws_iam_role.eks_cluster_role.arn
-  vpc_config {
-    subnet_ids = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id, aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id]
-  }
-
-  tags = {
-    Name = "goapigovernance-eks"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_iam_role" "eks_node_role" {
-  name = "goapigovernance-eks-node-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = {
-    Name    = "goapigovernance-eks-node-role"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-  role       = aws_iam_role.eks_node_role.name
-}
-
-resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-  role       = aws_iam_role.eks_node_role.name
-}
-
-resource "aws_iam_role_policy_attachment" "eks_registry_readonly_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  role       = aws_iam_role.eks_node_role.name
-}
-
-resource "aws_eks_node_group" "goapigovernance_nodes" {
-  cluster_name    = aws_eks_cluster.goapigovernance_eks.name
-  node_group_name = "goapigovernance-node-group"
-  node_role_arn   = aws_iam_role.eks_node_role.arn
-  subnet_ids      = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id, aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id]
-  instance_types  = ["t3.medium"]
-
-  scaling_config {
-    desired_size = 2
-    max_size     = 3
-    min_size     = 1
-  }
-
-  depends_on = [
-    aws_iam_role.eks_node_role,
-    aws_iam_role_policy_attachment.eks_worker_node_policy,
-    aws_iam_role_policy_attachment.eks_cni_policy,
-    aws_iam_role_policy_attachment.eks_registry_readonly_policy
-  ]
-
-  tags = {
-    Name    = "goapigovernance-node-group"
-    Project = "goapigovernance"
-  }
-}
-
-resource "helm_release" "kong" {
-  name       = "kong"
-  repository = "https://charts.konghq.com"
-  chart      = "kong"
-  namespace  = "kong"
-
-  set {
-    name  = "proxy.type"
-    value = "LoadBalancer"
-  }
-
-  set {
-    name  = "admin.enabled"
-    value = "true"
-  }
-
-  set {
-    name  = "admin.type"
-    value = "LoadBalancer"
-  }
-}
-
-
-resource "aws_wafregional_web_acl" "goapigovernance_waf" {
-  name        = "goapigovernance-waf"
-  metric_name = "goapigovernanceWAF"
-
-  default_action {
-    type = "ALLOW"
-  }
-
-  tags = {
-    Name = "goapigovernance-waf"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_cognito_user_pool" "goapigovernance_user_pool" {
-  name = "goapigovernance-user-pool"
-
-  auto_verified_attributes = ["email"]
-  username_attributes      = ["email"]
-
-  schema {
-    attribute_data_type = "String"
-    name               = "email"
-    required           = true
-  }
-
-  admin_create_user_config {
-    allow_admin_create_user_only = true
-  }
-
-  tags = {
-    Name    = "goapigovernance-user-pool"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_cognito_user_pool_client" "goapigovernance_user_client" {
-  name         = "goapigovernance-client"
-  user_pool_id = aws_cognito_user_pool.goapigovernance_user_pool.id
-  generate_secret = true
-
-  allowed_oauth_flows = ["code", "implicit"]
-  allowed_oauth_scopes = ["openid", "email", "profile"]
-  supported_identity_providers = ["COGNITO"]
-
-  callback_urls = ["https://admin.goapigovernance.com/callback"]
-}
-
-
-resource "aws_cloudwatch_log_group" "goapigovernance_logs" {
-  name = "goapigovernance-logs"
-
-  tags = {
-    Name = "goapigovernance-logs"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_kinesis_stream" "goapigovernance_kinesis" {
-  name             = "goapigovernance-stream"
-  shard_count      = 1
-
-  tags = {
-    Name = "goapigovernance-kinesis"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_opensearch_domain" "goapigovernance_opensearch" {
-  domain_name    = "goapigovernance-search"
-  engine_version = "OpenSearch_2.3"
-
-  ebs_options {
-    ebs_enabled = true
-    volume_size = 20
-    volume_type = "gp2"
-  }
-
-  tags = {
-    Name = "goapigovernance-opensearch"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_iam_role" "terraform_ec2_role" {
-  name = "terraform-ec2-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = "sts:AssumeRole"
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = {
-    Name    = "terraform-ec2-role"
-    Project = "goapigovernance"
-  }
-}
-
-resource "aws_iam_policy" "quicksight_s3_access" {
-  name        = "quicksight-s3-access"
-  description = "Allows QuickSight to access S3 logs"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
+    Version   = "2012-10-17",
     Statement = [
       {
-        Action   = ["s3:GetObject", "s3:ListBucket"]
-        Effect   = "Allow"
-        Resource = [
-          "arn:aws:s3:::goapigovernance-logs",
-          "arn:aws:s3:::goapigovernance-logs/*"
-        ]
+        Action    = "sts:AssumeRole",
+        Effect    = "Allow",
+        Principal = { Service = "ecs-tasks.amazonaws.com" }
       }
     ]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "attach_quicksight_s3" {
-  policy_arn = aws_iam_policy.quicksight_s3_access.arn
-  role       = aws_iam_role.terraform_ec2_role.name
+resource "aws_iam_policy_attachment" "ecs_task_execution_policy_attachment" {
+  name       = "ecsTaskExecutionPolicyAttachment"
+  roles      = [aws_iam_role.ecs_task_execution_role.name]
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-resource "aws_quicksight_data_source" "goapigovernance_quicksight" {
-  data_source_id = "goapigovernance-quicksight"
-  name           = "goapigovernance-data-source"
-  type           = "S3"
+#########################################
+# Application Load Balancer & Security Groups
+#########################################
 
-  parameters {
-    s3 {
-      manifest_file_location {
-        bucket  = aws_s3_bucket.goapigovernance_logs.bucket
-        key     = "manifest.json"
+# Security group for ALB
+resource "aws_security_group" "alb_sg" {
+  name        = "alb-sg"
+  description = "Allow HTTP and HTTPS traffic"
+  vpc_id      = aws_vpc.cipher_vpc.id
+
+  ingress {
+    description = "Allow HTTP from anywhere"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow HTTPS from anywhere"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "alb-sg"
+  }
+}
+
+# Security group for ECS tasks (Kong)
+resource "aws_security_group" "ecs_sg" {
+  name        = "ecs-sg"
+  description = "Allow traffic from ALB"
+  vpc_id      = aws_vpc.cipher_vpc.id
+
+  ingress {
+    description     = "HTTP from ALB (Kong proxy port)"
+    from_port       = 8000
+    to_port         = 8000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "ecs-sg"
+  }
+}
+
+# Create an ALB
+resource "aws_lb" "cipher_alb" {
+  name               = "cipher-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id]
+  tags = {
+    Name = "cipher-alb"
+  }
+}
+
+# ALB Target Group for Kong (assumes Kong listens on port 8000)
+resource "aws_lb_target_group" "kong_tg" {
+  name     = "kong-tg"
+  port     = 8000
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.cipher_vpc.id
+
+  health_check {
+    path                = "/status"  # Adjust if needed
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name = "kong-tg"
+  }
+}
+
+# ALB Listener on HTTP (port 80)
+resource "aws_lb_listener" "http_listener" {
+  load_balancer_arn = aws_lb.cipher_alb.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.kong_tg.arn
+  }
+}
+
+#########################################
+# ECS Task Definition & Service for Kong
+#########################################
+
+# CloudWatch Log Group for Kong container logs
+resource "aws_cloudwatch_log_group" "kong_log_group" {
+  name              = "/ecs/kong"
+  retention_in_days = 7
+}
+
+# ECS Task Definition for Kong (using a custom image)
+resource "aws_ecs_task_definition" "kong_task" {
+  family                   = "kong"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "512"
+  memory                   = "1024"
+  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name         = "kong"
+      image        = "your_account_id.dkr.ecr.us-east-1.amazonaws.com/your-kong-image:latest"
+      essential    = true
+      portMappings = [
+        {
+          containerPort = 8000,
+          hostPort      = 8000,
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        {
+          name  = "KONG_DATABASE"
+          value = "off"
+        },
+        {
+          name  = "KONG_PROXY_ACCESS_LOG"
+          value = "/dev/stdout"
+        },
+        {
+          name  = "KONG_ADMIN_ACCESS_LOG"
+          value = "/dev/stdout"
+        },
+        {
+          name  = "KONG_PROXY_ERROR_LOG"
+          value = "/dev/stderr"
+        },
+        {
+          name  = "KONG_ADMIN_ERROR_LOG"
+          value = "/dev/stderr"
+        },
+        {
+          name  = "KONG_ADMIN_LISTEN"
+          value = "0.0.0.0:8001"
+        },
+        {
+          name  = "KONG_PROXY_LISTEN"
+          value = "0.0.0.0:8000"
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs",
+        options = {
+          "awslogs-group"         = "/ecs/kong",
+          "awslogs-region"        = "us-east-1",
+          "awslogs-stream-prefix" = "kong"
+        }
       }
     }
+  ])
+}
+
+# ECS Service for Kong on Fargate
+resource "aws_ecs_service" "kong_service" {
+  name            = "kong-service"
+  cluster         = aws_ecs_cluster.cipher_cluster.id
+  task_definition = aws_ecs_task_definition.kong_task.arn
+  launch_type     = "FARGATE"
+  desired_count   = 2
+  platform_version = "1.4.0"
+
+  network_configuration {
+    subnets         = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id]
+    security_groups = [aws_security_group.ecs_sg.id]
+    assign_public_ip = true
   }
 
-  tags = {
-    Name = "goapigovernance-quicksight"
-    Project = "goapigovernance"
+  load_balancer {
+    target_group_arn = aws_lb_target_group.kong_tg.arn
+    container_name   = "kong"
+    container_port   = 8000
+  }
+
+  depends_on = [
+    aws_lb_listener.http_listener
+  ]
+}
+
+#########################################
+# Route53 Hosted Zone and DNS Records
+#########################################
+
+# Create a Hosted Zone for goapigovernance.com
+resource "aws_route53_zone" "goapigovernance" {
+  name = "goapigovernance.com"
+}
+
+# DNS Record for API (api.goapigovernance.com)
+resource "aws_route53_record" "api_record" {
+  zone_id = aws_route53_zone.goapigovernance.zone_id
+  name    = "api.goapigovernance.com"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.cipher_alb.dns_name
+    zone_id                = aws_lb.cipher_alb.zone_id
+    evaluate_target_health = true
   }
 }
 
-resource "aws_s3_bucket" "goapigovernance_logs" {
-  bucket = "goapigovernance-logs"
+# DNS Record for Partner Portal (portal.goapigovernance.com)
+resource "aws_route53_record" "portal_record" {
+  zone_id = aws_route53_zone.goapigovernance.zone_id
+  name    = "portal.goapigovernance.com"
+  type    = "A"
 
-  tags = {
-    Name = "goapigovernance-s3"
-    Project = "goapigovernance"
+  alias {
+    name                   = aws_lb.cipher_alb.dns_name
+    zone_id                = aws_lb.cipher_alb.zone_id
+    evaluate_target_health = true
   }
 }
 
-resource "aws_redshift_cluster" "goapigovernance_redshift" {
-  cluster_identifier = "goapigovernance-redshift"
-  node_type          = "dc2.large"
-  number_of_nodes    = 2
-  master_username    = "admin"
-  master_password    = "SuperSecurePassword123"
+# DNS Record for Dashboard (dash.goapigovernance.com)
+resource "aws_route53_record" "dash_record" {
+  zone_id = aws_route53_zone.goapigovernance.zone_id
+  name    = "dash.goapigovernance.com"
+  type    = "A"
 
-  tags = {
-    Name = "goapigovernance-redshift"
-    Project = "goapigovernance"
+  alias {
+    name                   = aws_lb.cipher_alb.dns_name
+    zone_id                = aws_lb.cipher_alb.zone_id
+    evaluate_target_health = true
   }
 }
