@@ -33,7 +33,7 @@ jobs:
       - name: Deploy Terraform on EC2
         run: |
           ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            cd /path/to/your/terraform/project
+            cd /home/ec2-user/goapigovernance-infra
             git pull origin main
             terraform init
             terraform validate
@@ -62,7 +62,7 @@ jobs:
       - name: Destroy Terraform on EC2
         run: |
           ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            cd /path/to/your/terraform/project
+            cd /home/ec2-user/goapigovernance-infra
             git pull origin destroy
             terraform init
             terraform destroy -auto-approve
