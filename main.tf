@@ -251,6 +251,22 @@ resource "aws_dynamodb_table" "partner_config" {
 # S3 Bucket & CloudFront for Partner Portal
 #############################
 
+resource "aws_s3_bucket" "partner_portal" {
+  bucket = "goapigovernance-portal-bucket"
+  
+  # Remove ACL because of ObjectOwnership enforcement
+  # acl    = "public-read" 
+
+  website {
+    index_document = "index.html"
+    error_document = "error.html"
+  }
+
+  tags = {
+    Name = "Partner Portal Bucket"
+  }
+}
+
 resource "aws_s3_bucket_policy" "partner_portal_policy" {
   bucket = aws_s3_bucket.partner_portal.id
 
@@ -300,9 +316,9 @@ resource "aws_cloudfront_distribution" "portal_distribution" {
   }
 
   viewer_certificate {
-    acm_certificate_arn            = aws_acm_certificate.api_cert.arn
-    ssl_support_method             = "sni-only"
-    minimum_protocol_version       = "TLSv1.2_2019"
+    acm_certificate_arn      = aws_acm_certificate.api_cert.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2019"
   }
 
   restrictions {
