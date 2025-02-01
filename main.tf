@@ -270,6 +270,11 @@ resource "aws_s3_bucket" "partner_portal" {
   # Remove ACL because of ObjectOwnership enforcement
   # acl    = "public-read" 
 
+  timeouts {
+    create = "10m"
+    update = "10m"
+  }
+
   website {
     index_document = "index.html"
     error_document = "error.html"
