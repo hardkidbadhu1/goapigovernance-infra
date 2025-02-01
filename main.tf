@@ -1,360 +1,337 @@
 terraform {
+  required_version = ">= 1.0"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 4.0"
+      version = "~> 5.0"
     }
   }
-  required_version = ">= 1.0"
 }
 
 provider "aws" {
-  region = "ap-northeast-1"
+  region = var.aws_region
 }
 
-#########################################
-# VPC, Subnets, and Internet Gateway
-#########################################
-
-resource "aws_vpc" "cipher_vpc" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_support   = true
-  enable_dns_hostnames = true
-  tags = {
-    Name = "cipher-vpc"
-  }
+variable "aws_region" {
+  description = "AWS Region to deploy the infrastructure"
+  default     = "us-west-2"
 }
 
-resource "aws_subnet" "public_subnet_1" {
-  vpc_id                  = aws_vpc.cipher_vpc.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "ap-northeast-1a"
-  map_public_ip_on_launch = true
-  tags = {
-    Name = "cipher-public-subnet-1"
-  }
-}
+#############################
+# Route53 & ACM Certificate
+#############################
 
-resource "aws_subnet" "public_subnet_2" {
-  vpc_id                  = aws_vpc.cipher_vpc.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = "ap-northeast-1c"
-  map_public_ip_on_launch = true
-  tags = {
-    Name = "cipher-public-subnet-2"
-  }
-}
-
-resource "aws_internet_gateway" "cipher_igw" {
-  vpc_id = aws_vpc.cipher_vpc.id
-  tags = {
-    Name = "cipher-igw"
-  }
-}
-
-resource "aws_route_table" "public_rt" {
-  vpc_id = aws_vpc.cipher_vpc.id
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.cipher_igw.id
-  }
-  tags = {
-    Name = "cipher-public-rt"
-  }
-}
-
-resource "aws_route_table_association" "public_rt_assoc_1" {
-  subnet_id      = aws_subnet.public_subnet_1.id
-  route_table_id = aws_route_table.public_rt.id
-}
-
-resource "aws_route_table_association" "public_rt_assoc_2" {
-  subnet_id      = aws_subnet.public_subnet_2.id
-  route_table_id = aws_route_table.public_rt.id
-}
-
-#########################################
-# ECS Cluster & Task Execution Role
-#########################################
-
-resource "aws_ecs_cluster" "cipher_cluster" {
-  name = "cipher-cluster"
-}
-
-resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "ecsTaskExecutionRole"
-  assume_role_policy = jsonencode({
-    Version   = "2012-10-17",
-    Statement = [
-      {
-        Action    = "sts:AssumeRole",
-        Effect    = "Allow",
-        Principal = { Service = "ecs-tasks.amazonaws.com" }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_policy_attachment" "ecs_task_execution_policy_attachment" {
-  name       = "ecsTaskExecutionPolicyAttachment"
-  roles      = [aws_iam_role.ecs_task_execution_role.name]
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-#########################################
-# Application Load Balancer & Security Groups
-#########################################
-
-# Security group for ALB
-resource "aws_security_group" "alb_sg" {
-  name        = "alb-sg"
-  description = "Allow HTTP and HTTPS traffic"
-  vpc_id      = aws_vpc.cipher_vpc.id
-
-  ingress {
-    description = "Allow HTTP from anywhere"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "Allow HTTPS from anywhere"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "alb-sg"
-  }
-}
-
-# Security group for ECS tasks (Kong)
-resource "aws_security_group" "ecs_sg" {
-  name        = "ecs-sg"
-  description = "Allow traffic from ALB"
-  vpc_id      = aws_vpc.cipher_vpc.id
-
-  ingress {
-    description     = "HTTP from ALB (Kong proxy port)"
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb_sg.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "ecs-sg"
-  }
-}
-
-# Create an ALB
-resource "aws_lb" "cipher_alb" {
-  name               = "cipher-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb_sg.id]
-  subnets            = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id]
-  tags = {
-    Name = "cipher-alb"
-  }
-}
-
-# ALB Target Group for Kong (assumes Kong listens on port 8000)
-resource "aws_lb_target_group" "kong_tg" {
-  name        = "kong-tg"
-  port        = 8000
-  protocol    = "HTTP"
-  target_type = "ip"  # Specify target type as IP for awsvpc mode
-  vpc_id      = aws_vpc.cipher_vpc.id
-
-  health_check {
-    path                = "/status"  # Adjust if needed
-    protocol            = "HTTP"
-    matcher             = "200"
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-  }
-
-  tags = {
-    Name = "kong-tg"
-  }
-}
-
-# ALB Listener on HTTP (port 80)
-resource "aws_lb_listener" "http_listener" {
-  load_balancer_arn = aws_lb.cipher_alb.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.kong_tg.arn
-  }
-}
-
-#########################################
-# ECS Task Definition & Service for Kong
-#########################################
-
-# CloudWatch Log Group for Kong container logs
-resource "aws_cloudwatch_log_group" "kong_log_group" {
-  name              = "/ecs/kong"
-  retention_in_days = 7
-}
-
-# ECS Task Definition for Kong (using a custom public image from ECR Public)
-resource "aws_ecs_task_definition" "kong_task" {
-  family                   = "kong"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = "512"
-  memory                   = "1024"
-  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
-
-  container_definitions = jsonencode([
-    {
-      name         = "kong"
-      image        = "public.ecr.aws/e0y0d1d4/apigovernance/kong_lua:latest"
-      essential    = true
-      portMappings = [
-        {
-          containerPort = 8000,
-          hostPort      = 8000,
-          protocol      = "tcp"
-        }
-      ]
-      environment = [
-        {
-          name  = "KONG_DATABASE"
-          value = "off"
-        },
-        {
-          name  = "KONG_PROXY_ACCESS_LOG"
-          value = "/dev/stdout"
-        },
-        {
-          name  = "KONG_ADMIN_ACCESS_LOG"
-          value = "/dev/stdout"
-        },
-        {
-          name  = "KONG_PROXY_ERROR_LOG"
-          value = "/dev/stderr"
-        },
-        {
-          name  = "KONG_ADMIN_ERROR_LOG"
-          value = "/dev/stderr"
-        },
-        {
-          name  = "KONG_ADMIN_LISTEN"
-          value = "0.0.0.0:8001"
-        },
-        {
-          name  = "KONG_PROXY_LISTEN"
-          value = "0.0.0.0:8000"
-        }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs",
-        options = {
-          "awslogs-group"         = "/ecs/kong",
-          "awslogs-region"        = "ap-northeast-1",
-          "awslogs-stream-prefix" = "kong"
-        }
-      }
-    }
-  ])
-}
-
-# ECS Service for Kong on Fargate
-resource "aws_ecs_service" "kong_service" {
-  name            = "kong-service"
-  cluster         = aws_ecs_cluster.cipher_cluster.id
-  task_definition = aws_ecs_task_definition.kong_task.arn
-  launch_type     = "FARGATE"
-  desired_count   = 2
-  platform_version = "1.4.0"
-
-  network_configuration {
-    subnets         = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id]
-    security_groups = [aws_security_group.ecs_sg.id]
-    assign_public_ip = true
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.kong_tg.arn
-    container_name   = "kong"
-    container_port   = 8000
-  }
-
-  depends_on = [
-    aws_lb_listener.http_listener
-  ]
-}
-
-#########################################
-# Route53 Hosted Zone and DNS Records
-#########################################
-
-# Create a Hosted Zone for goapigovernance.com
+# Create (or reference) a Route53 Hosted Zone for your domain.
 resource "aws_route53_zone" "goapigovernance" {
   name = "goapigovernance.com"
 }
 
-# DNS Record for API (api.goapigovernance.com)
+# Request an ACM certificate for the API domain.
+resource "aws_acm_certificate" "api_cert" {
+  domain_name       = "api.goapigovernance.com"
+  validation_method = "DNS"
+
+  subject_alternative_names = ["*.api.goapigovernance.com"]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Create DNS records for ACM certificate validation.
+resource "aws_route53_record" "api_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.api_cert.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      type   = dvo.resource_record_type
+      record = dvo.resource_record_value
+    }
+  }
+
+  zone_id = aws_route53_zone.goapigovernance.zone_id
+  name    = each.value.name
+  type    = each.value.type
+  records = [each.value.record]
+  ttl     = 60
+}
+
+# Validate the ACM certificate.
+resource "aws_acm_certificate_validation" "api_cert_val" {
+  certificate_arn         = aws_acm_certificate.api_cert.arn
+  validation_record_fqdns = [for record in aws_route53_record.api_cert_validation : record.fqdn]
+}
+
+# Create DNS records for your API and Partner Portal.
 resource "aws_route53_record" "api_record" {
   zone_id = aws_route53_zone.goapigovernance.zone_id
   name    = "api.goapigovernance.com"
   type    = "A"
 
   alias {
-    name                   = aws_lb.cipher_alb.dns_name
-    zone_id                = aws_lb.cipher_alb.zone_id
-    evaluate_target_health = true
+    name                   = aws_apigatewayv2_api.cipher_api.api_endpoint
+    zone_id                = "Z2FDTNDATAQYW2"  # CloudFront distribution zone ID used by API Gateway (for edge-optimized APIs)
+    evaluate_target_health = false
   }
 }
 
-# DNS Record for Partner Portal (portal.goapigovernance.com)
 resource "aws_route53_record" "portal_record" {
   zone_id = aws_route53_zone.goapigovernance.zone_id
   name    = "portal.goapigovernance.com"
   type    = "A"
 
   alias {
-    name                   = aws_lb.cipher_alb.dns_name
-    zone_id                = aws_lb.cipher_alb.zone_id
-    evaluate_target_health = true
+    name                   = aws_cloudfront_distribution.portal_distribution.domain_name
+    zone_id                = aws_cloudfront_distribution.portal_distribution.hosted_zone_id
+    evaluate_target_health = false
   }
 }
 
-# DNS Record for Dashboard (dash.goapigovernance.com)
-resource "aws_route53_record" "dash_record" {
-  zone_id = aws_route53_zone.goapigovernance.zone_id
-  name    = "dash.goapigovernance.com"
-  type    = "A"
+#############################
+# DynamoDB for Partner Config
+#############################
 
-  alias {
-    name                   = aws_lb.cipher_alb.dns_name
-    zone_id                = aws_lb.cipher_alb.zone_id
-    evaluate_target_health = true
+resource "aws_dynamodb_table" "partner_config" {
+  name         = "partner_config"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "PartnerID"
+
+  attribute {
+    name = "PartnerID"
+    type = "S"
   }
+}
+
+#############################
+# S3 Bucket & CloudFront for Partner Portal
+#############################
+
+resource "aws_s3_bucket" "partner_portal" {
+  bucket = "goapigovernance-portal-bucket"
+  acl    = "public-read"
+
+  website {
+    index_document = "index.html"
+    error_document = "error.html"
+  }
+
+  tags = {
+    Name = "Partner Portal Bucket"
+  }
+}
+
+resource "aws_cloudfront_distribution" "portal_distribution" {
+  origin {
+    domain_name = aws_s3_bucket.partner_portal.website_endpoint
+    origin_id   = "S3-goapigovernance-portal"
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  enabled             = true
+  is_ipv6_enabled     = true
+  default_root_object = "index.html"
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD", "OPTIONS"]
+    target_origin_id = "S3-goapigovernance-portal"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
+  viewer_certificate {
+    acm_certificate_arn            = aws_acm_certificate.api_cert_val.certificate_arn
+    ssl_support_method             = "sni-only"
+    minimum_protocol_version       = "TLSv1.2_2019"
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  tags = {
+    Name = "Partner Portal Distribution"
+  }
+}
+
+#############################
+# IAM for Lambda & Step Functions
+#############################
+
+# IAM Role for Lambda functions (maintenance check, onboarding, etc.)
+resource "aws_iam_role" "lambda_role" {
+  name = "cipher_lambda_role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Action    = "sts:AssumeRole",
+      Effect    = "Allow",
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Policy for Lambda to read from DynamoDB.
+resource "aws_iam_policy" "lambda_dynamodb_policy" {
+  name        = "LambdaDynamoDBPolicy"
+  description = "Policy for Lambda to read partner config from DynamoDB"
+  policy      = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Action   = [
+        "dynamodb:GetItem",
+        "dynamodb:Query"
+      ],
+      Effect   = "Allow",
+      Resource = aws_dynamodb_table.partner_config.arn
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_dynamodb_attach" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = aws_iam_policy.lambda_dynamodb_policy.arn
+}
+
+# IAM Role for Step Functions
+resource "aws_iam_role" "stepfunctions_role" {
+  name = "cipher_stepfunctions_role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Action    = "sts:AssumeRole",
+      Effect    = "Allow",
+      Principal = { Service = "states.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "stepfunctions_basic" {
+  role       = aws_iam_role.stepfunctions_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSStepFunctionsFullAccess"
+}
+
+#############################
+# Lambda Function: Maintenance Check
+#############################
+
+# (Place your Lambda package zip in the "lambda" directory.)
+resource "aws_lambda_function" "maintenance_check" {
+  function_name = "maintenance_check"
+  handler       = "index.lambda_handler"
+  runtime       = "python3.9"
+  role          = aws_iam_role.lambda_role.arn
+
+  filename         = "lambda/maintenance_check.zip"
+  source_code_hash = filebase64sha256("lambda/maintenance_check.zip")
+
+  environment {
+    variables = {
+      DDB_TABLE = aws_dynamodb_table.partner_config.name
+    }
+  }
+}
+
+# Allow API Gateway to invoke the Lambda function.
+resource "aws_lambda_permission" "apigw_lambda" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.maintenance_check.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.cipher_api.execution_arn}/*/*"
+}
+
+#############################
+# API Gateway v2 (HTTP API)
+#############################
+
+resource "aws_apigatewayv2_api" "cipher_api" {
+  name          = "cipher-api"
+  protocol_type = "HTTP"
+}
+
+resource "aws_apigatewayv2_integration" "lambda_integration" {
+  api_id           = aws_apigatewayv2_api.cipher_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.maintenance_check.invoke_arn
+  payload_format_version = "2.0"
+}
+
+# Define a catch-all route that sends all requests to the Lambda integration.
+resource "aws_apigatewayv2_route" "default_route" {
+  api_id    = aws_apigatewayv2_api.cipher_api.id
+  route_key = "$default"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+# Create a default stage with auto-deploy enabled.
+resource "aws_apigatewayv2_stage" "default_stage" {
+  api_id      = aws_apigatewayv2_api.cipher_api.id
+  name        = "$default"
+  auto_deploy = true
+}
+
+#############################
+# Step Functions: Partner Onboarding Workflow (Sample)
+#############################
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_sfn_state_machine" "partner_onboarding" {
+  name     = "partner_onboarding"
+  role_arn = aws_iam_role.stepfunctions_role.arn
+
+  definition = jsonencode({
+    Comment = "Partner onboarding workflow",
+    StartAt = "ValidateSubmission",
+    States = {
+      ValidateSubmission = {
+        Type     = "Task",
+        Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:validate_submission",
+        Next     = "WaitForApproval"
+      },
+      WaitForApproval = {
+        Type     = "Wait",
+        Seconds  = 60,
+        Next     = "UpdateAPIGateway"
+      },
+      UpdateAPIGateway = {
+        Type     = "Task",
+        Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:update_api_gateway",
+        End      = true
+      }
+    }
+  })
+}
+
+#############################
+# Outputs
+#############################
+
+output "api_gateway_endpoint" {
+  description = "The endpoint URL for the API Gateway"
+  value       = aws_apigatewayv2_api.cipher_api.api_endpoint
+}
+
+output "partner_portal_url" {
+  description = "The CloudFront URL for the Partner Portal"
+  value       = aws_cloudfront_distribution.portal_distribution.domain_name
 }
