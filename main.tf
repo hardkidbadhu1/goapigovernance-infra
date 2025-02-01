@@ -174,7 +174,7 @@ resource "aws_route53_zone" "goapigovernance" {
 }
 
 resource "aws_acm_certificate" "cloudfront_cert" {
-  provider          = aws.us_east_1
+  provider          = aws.ap_south_1
   domain_name       = "api.goapigovernance.com"
   validation_method = "DNS"
 
