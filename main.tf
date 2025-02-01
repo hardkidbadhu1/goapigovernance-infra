@@ -10,6 +10,7 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
+  alias  = "us_east_1"
 }
 
 variable "aws_region" {
@@ -172,6 +173,18 @@ resource "aws_route53_zone" "goapigovernance" {
   name = "goapigovernance.com"
 }
 
+resource "aws_acm_certificate" "cloudfront_cert" {
+  provider          = aws.us_east_1
+  domain_name       = "api.goapigovernance.com"
+  validation_method = "DNS"
+
+  subject_alternative_names = ["*.api.goapigovernance.com"]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 # Request an ACM certificate for the API domain.
 resource "aws_acm_certificate" "api_cert" {
   domain_name       = "api.goapigovernance.com"
@@ -267,11 +280,19 @@ resource "aws_s3_bucket" "partner_portal" {
   }
 }
 
+resource "aws_s3_bucket_public_access_block" "partner_portal" {
+  bucket                  = aws_s3_bucket.partner_portal.id
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
 resource "aws_s3_bucket_policy" "partner_portal_policy" {
   bucket = aws_s3_bucket.partner_portal.id
 
   policy = jsonencode({
-    Version = "2012-10-17",
+    Version   = "2012-10-17",
     Statement = [
       {
         Sid       = "PublicReadGetObject",
@@ -316,7 +337,7 @@ resource "aws_cloudfront_distribution" "portal_distribution" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate.api_cert.arn
+    acm_certificate_arn      = aws_acm_certificate.cloudfront_cert.arn
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2019"
   }
