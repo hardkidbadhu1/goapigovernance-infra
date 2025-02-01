@@ -288,8 +288,12 @@ resource "aws_s3_bucket_public_access_block" "partner_portal" {
   restrict_public_buckets = false
 }
 
+resource "random_id" "bucket_suffix" {
+  byte_length = 4
+}
+
 resource "aws_s3_bucket_policy" "partner_portal_policy" {
-  bucket = aws_s3_bucket.partner_portal.id
+  bucket = "goapigovernance-portal-bucket-${random_id.bucket_suffix.hex}"
 
   policy = jsonencode({
     Version   = "2012-10-17",
