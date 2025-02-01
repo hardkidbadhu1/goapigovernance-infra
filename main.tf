@@ -200,7 +200,7 @@ resource "aws_acm_certificate" "api_cert" {
 # Create DNS records for ACM certificate validation.
 resource "aws_route53_record" "api_cert_validation" {
   for_each = {
-    for dvo in aws_acm_certificate.api_cert.domain_validation_options : dvo.domain_name => {
+    for dvo in aws_acm_certificate.cloudfront_cert.domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name
       type   = dvo.resource_record_type
       record = dvo.resource_record_value
@@ -212,6 +212,10 @@ resource "aws_route53_record" "api_cert_validation" {
   type    = each.value.type
   records = [each.value.record]
   ttl     = 60
+
+  lifecycle {
+    ignore_changes = [records]  # if needed, to avoid conflicts with manual changes
+  }
 }
 
 # Validate the ACM certificate.
@@ -224,13 +228,9 @@ resource "aws_acm_certificate_validation" "api_cert_val" {
 resource "aws_route53_record" "api_record" {
   zone_id = aws_route53_zone.goapigovernance.zone_id
   name    = "api.goapigovernance.com"
-  type    = "A"
-
-  alias {
-    name                   = aws_apigatewayv2_api.goapigovernance_api.api_endpoint
-    zone_id                = "Z2FDTNDATAQYW2"  # CloudFront distribution zone ID used by API Gateway (for edge-optimized APIs)
-    evaluate_target_health = false
-  }
+  type    = "CNAME"
+  ttl     = 300
+  records = [aws_apigatewayv2_api.cipher_api.api_endpoint]
 }
 
 resource "aws_route53_record" "portal_record" {
