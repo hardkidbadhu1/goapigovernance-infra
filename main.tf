@@ -13,8 +13,154 @@ provider "aws" {
 }
 
 variable "aws_region" {
-  description = "AWS Region to deploy the infrastructure"
+  description = "The AWS region to deploy into."
   default     = "us-west-2"
+}
+
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC."
+  default     = "10.0.0.0/16"
+}
+
+variable "public_subnet_cidrs" {
+  description = "List of CIDRs for public subnets."
+  type        = list(string)
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+}
+
+variable "private_subnet_cidrs" {
+  description = "List of CIDRs for private subnets."
+  type        = list(string)
+  default     = ["10.0.101.0/24", "10.0.102.0/24"]
+}
+
+######################################
+# VPC
+######################################
+resource "aws_vpc" "goapigovernance_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+  tags = {
+    Name = "goapigovernance_vpc"
+  }
+}
+
+######################################
+# Public Subnets
+######################################
+resource "aws_subnet" "public" {
+  count                   = length(var.public_subnet_cidrs)
+  vpc_id                  = aws_vpc.goapigovernance_vpc.id
+  cidr_block              = var.public_subnet_cidrs[count.index]
+  availability_zone       = "${var.aws_region}${element(["a", "b"], count.index)}"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "goapigovernance-public-subnet-${count.index + 1}"
+  }
+}
+
+######################################
+# Private Subnets
+######################################
+resource "aws_subnet" "private" {
+  count             = length(var.private_subnet_cidrs)
+  vpc_id            = aws_vpc.goapigovernance_vpc.id
+  cidr_block        = var.private_subnet_cidrs[count.index]
+  availability_zone = "${var.aws_region}${element(["a", "b"], count.index)}"
+  tags = {
+    Name = "goapigovernance-private-subnet-${count.index + 1}"
+  }
+}
+
+######################################
+# Internet Gateway
+######################################
+resource "aws_internet_gateway" "goapigovernance_igw" {
+  vpc_id = aws_vpc.goapigovernance_vpc.id
+  tags = {
+    Name = "goapigovernance_igw"
+  }
+}
+
+######################################
+# Elastic IP for NAT Gateway
+######################################
+resource "aws_eip" "nat_eip" {
+  vpc = true
+}
+
+######################################
+# NAT Gateway (in first public subnet)
+######################################
+resource "aws_nat_gateway" "goapigovernance_nat" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.public[0].id
+  tags = {
+    Name = "goapigovernance_nat_gateway"
+  }
+}
+
+######################################
+# Public Route Table & Associations
+######################################
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.goapigovernance_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.goapigovernance_igw.id
+  }
+
+  tags = {
+    Name = "goapigovernance_public-rt"
+  }
+}
+
+resource "aws_route_table_association" "public_rt_assoc" {
+  count          = length(var.public_subnet_cidrs)
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+######################################
+# Private Route Table & Associations
+######################################
+resource "aws_route_table" "private_rt" {
+  vpc_id = aws_vpc.goapigovernance_vpc.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.goapigovernance_nat.id
+  }
+
+  tags = {
+    Name = "goapigovernance_private_rt"
+  }
+}
+
+resource "aws_route_table_association" "private_rt_assoc" {
+  count          = length(var.private_subnet_cidrs)
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private_rt.id
+}
+
+######################################
+# Outputs
+######################################
+output "vpc_id" {
+  description = "The ID of the VPC"
+  value       = aws_vpc.goapigovernance_vpc.id
+}
+
+output "public_subnet_ids" {
+  description = "List of public subnet IDs"
+  value       = aws_subnet.public[*].id
+}
+
+output "private_subnet_ids" {
+  description = "List of private subnet IDs"
+  value       = aws_subnet.private[*].id
 }
 
 #############################
@@ -68,7 +214,7 @@ resource "aws_route53_record" "api_record" {
   type    = "A"
 
   alias {
-    name                   = aws_apigatewayv2_api.cipher_api.api_endpoint
+    name                   = aws_apigatewayv2_api.goapigovernance_api.api_endpoint
     zone_id                = "Z2FDTNDATAQYW2"  # CloudFront distribution zone ID used by API Gateway (for edge-optimized APIs)
     evaluate_target_health = false
   }
@@ -173,7 +319,7 @@ resource "aws_cloudfront_distribution" "portal_distribution" {
 
 # IAM Role for Lambda functions (maintenance check, onboarding, etc.)
 resource "aws_iam_role" "lambda_role" {
-  name = "cipher_lambda_role"
+  name = "goapigovernance_lambda_role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
@@ -213,7 +359,7 @@ resource "aws_iam_role_policy_attachment" "lambda_dynamodb_attach" {
 
 # IAM Role for Step Functions
 resource "aws_iam_role" "stepfunctions_role" {
-  name = "cipher_stepfunctions_role"
+  name = "goapigovernance_stepfunctions_role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
@@ -256,20 +402,20 @@ resource "aws_lambda_permission" "apigw_lambda" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.maintenance_check.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.cipher_api.execution_arn}/*/*"
+  source_arn    = "${aws_apigatewayv2_api.goapigovernance_api.execution_arn}/*/*"
 }
 
 #############################
 # API Gateway v2 (HTTP API)
 #############################
 
-resource "aws_apigatewayv2_api" "cipher_api" {
-  name          = "cipher-api"
+resource "aws_apigatewayv2_api" "goapigovernance_api" {
+  name          = "goapigovernance-api"
   protocol_type = "HTTP"
 }
 
 resource "aws_apigatewayv2_integration" "lambda_integration" {
-  api_id           = aws_apigatewayv2_api.cipher_api.id
+  api_id           = aws_apigatewayv2_api.goapigovernance_api.id
   integration_type = "AWS_PROXY"
   integration_uri  = aws_lambda_function.maintenance_check.invoke_arn
   payload_format_version = "2.0"
@@ -277,14 +423,14 @@ resource "aws_apigatewayv2_integration" "lambda_integration" {
 
 # Define a catch-all route that sends all requests to the Lambda integration.
 resource "aws_apigatewayv2_route" "default_route" {
-  api_id    = aws_apigatewayv2_api.cipher_api.id
+  api_id    = aws_apigatewayv2_api.goapigovernance_api.id
   route_key = "$default"
   target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
 }
 
 # Create a default stage with auto-deploy enabled.
 resource "aws_apigatewayv2_stage" "default_stage" {
-  api_id      = aws_apigatewayv2_api.cipher_api.id
+  api_id      = aws_apigatewayv2_api.goapigovernance_api.id
   name        = "$default"
   auto_deploy = true
 }
@@ -328,7 +474,7 @@ resource "aws_sfn_state_machine" "partner_onboarding" {
 
 output "api_gateway_endpoint" {
   description = "The endpoint URL for the API Gateway"
-  value       = aws_apigatewayv2_api.cipher_api.api_endpoint
+  value       = aws_apigatewayv2_api.goapigovernance_api.api_endpoint
 }
 
 output "partner_portal_url" {
