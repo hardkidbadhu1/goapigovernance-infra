@@ -229,26 +229,6 @@ resource "aws_eks_node_group" "goapigovernance_nodes" {
   }
 }
 
-resource "aws_iam_role" "eks_node_role" {
-  name = "goapigovernance-eks-node-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = {
-    Name = "goapigovernance-eks-node-role"
-    Project = "goapigovernance"
-  }
-}
-
 resource "helm_release" "kong" {
   name       = "kong"
   repository = "https://charts.konghq.com"
