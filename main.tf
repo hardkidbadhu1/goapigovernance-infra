@@ -251,18 +251,21 @@ resource "aws_dynamodb_table" "partner_config" {
 # S3 Bucket & CloudFront for Partner Portal
 #############################
 
-resource "aws_s3_bucket" "partner_portal" {
-  bucket = "goapigovernance-portal-bucket"
-  acl    = "public-read"
+resource "aws_s3_bucket_policy" "partner_portal_policy" {
+  bucket = aws_s3_bucket.partner_portal.id
 
-  website {
-    index_document = "index.html"
-    error_document = "error.html"
-  }
-
-  tags = {
-    Name = "Partner Portal Bucket"
-  }
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "PublicReadGetObject",
+        Effect    = "Allow",
+        Principal = "*",
+        Action    = "s3:GetObject",
+        Resource  = "${aws_s3_bucket.partner_portal.arn}/*"
+      }
+    ]
+  })
 }
 
 resource "aws_cloudfront_distribution" "portal_distribution" {
@@ -372,7 +375,7 @@ resource "aws_iam_role" "stepfunctions_role" {
 
 resource "aws_iam_role_policy_attachment" "stepfunctions_basic" {
   role       = aws_iam_role.stepfunctions_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSStepFunctionsFullAccess"
+  policy_arn = "arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess"
 }
 
 #############################
