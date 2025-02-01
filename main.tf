@@ -10,12 +10,12 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
-  alias  = "us_east_1"
+  alias  = "ap_south_1"
 }
 
 variable "aws_region" {
   description = "The AWS region to deploy into."
-  default     = "us-west-2"
+  default     = "ap-south-1"
 }
 
 variable "vpc_cidr" {
