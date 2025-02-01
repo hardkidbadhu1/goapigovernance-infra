@@ -179,10 +179,11 @@ resource "aws_lb" "cipher_alb" {
 
 # ALB Target Group for Kong (assumes Kong listens on port 8000)
 resource "aws_lb_target_group" "kong_tg" {
-  name     = "kong-tg"
-  port     = 8000
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.cipher_vpc.id
+  name        = "kong-tg"
+  port        = 8000
+  protocol    = "HTTP"
+  target_type = "ip"  # Specify target type as IP for awsvpc mode
+  vpc_id      = aws_vpc.cipher_vpc.id
 
   health_check {
     path                = "/status"  # Adjust if needed
