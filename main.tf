@@ -230,7 +230,7 @@ resource "aws_route53_record" "api_record" {
   name    = "api.goapigovernance.com"
   type    = "CNAME"
   ttl     = 300
-  records = [aws_apigatewayv2_api.cipher_api.api_endpoint]
+  records = [aws_apigatewayv2_api.goapigovernance_api.api_endpoint]
 }
 
 resource "aws_route53_record" "portal_record" {
