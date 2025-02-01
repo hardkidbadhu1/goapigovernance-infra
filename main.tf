@@ -9,7 +9,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region = "ap-northeast-1"
 }
 
 #########################################
@@ -28,7 +28,7 @@ resource "aws_vpc" "cipher_vpc" {
 resource "aws_subnet" "public_subnet_1" {
   vpc_id                  = aws_vpc.cipher_vpc.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = "us-east-1a"
+  availability_zone       = "ap-northeast-1a"
   map_public_ip_on_launch = true
   tags = {
     Name = "cipher-public-subnet-1"
@@ -38,7 +38,7 @@ resource "aws_subnet" "public_subnet_1" {
 resource "aws_subnet" "public_subnet_2" {
   vpc_id                  = aws_vpc.cipher_vpc.id
   cidr_block              = "10.0.2.0/24"
-  availability_zone       = "us-east-1b"
+  availability_zone       = "ap-northeast-1c"
   map_public_ip_on_launch = true
   tags = {
     Name = "cipher-public-subnet-2"
@@ -222,7 +222,7 @@ resource "aws_cloudwatch_log_group" "kong_log_group" {
   retention_in_days = 7
 }
 
-# ECS Task Definition for Kong (using a custom image)
+# ECS Task Definition for Kong (using a custom public image from ECR Public)
 resource "aws_ecs_task_definition" "kong_task" {
   family                   = "kong"
   network_mode             = "awsvpc"
@@ -234,7 +234,7 @@ resource "aws_ecs_task_definition" "kong_task" {
   container_definitions = jsonencode([
     {
       name         = "kong"
-      image        = "your_account_id.dkr.ecr.us-east-1.amazonaws.com/your-kong-image:latest"
+      image        = "public.ecr.aws/e0y0d1d4/apigovernance/kong_lua:latest"
       essential    = true
       portMappings = [
         {
@@ -277,7 +277,7 @@ resource "aws_ecs_task_definition" "kong_task" {
         logDriver = "awslogs",
         options = {
           "awslogs-group"         = "/ecs/kong",
-          "awslogs-region"        = "us-east-1",
+          "awslogs-region"        = "ap-northeast-1",
           "awslogs-stream-prefix" = "kong"
         }
       }
