@@ -88,7 +88,7 @@ resource "aws_internet_gateway" "goapigovernance_igw" {
 # Elastic IP for NAT Gateway
 ######################################
 resource "aws_eip" "nat_eip" {
-  vpc = true
+  domain = "vpc"
 }
 
 ######################################
@@ -316,7 +316,7 @@ resource "aws_s3_bucket_policy" "partner_portal_policy" {
 
 resource "aws_cloudfront_distribution" "portal_distribution" {
   origin {
-    domain_name = aws_s3_bucket.partner_portal.website_endpoint
+    domain_name = aws_s3_bucket.partner_portal.website_domain
     origin_id   = "S3-goapigovernance-portal"
     custom_origin_config {
       http_port              = 80
